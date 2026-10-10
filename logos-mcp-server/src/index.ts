@@ -23,6 +23,9 @@ import {
 } from "./services/sqlite-reader.js";
 import { searchCatalog, getResourceTypeSummary, typeLabel } from "./services/catalog-reader.js";
 import { captureLogosPanel, getLogosWindowTitles, scrollLogosPanel } from "./services/screenshot-capture.js";
+import { readExportedPdf } from "./services/pdf-reader.js";
+import { cleanExportPages, findPhrase, sectionFrom, openingText } from "./utils/pdf-text.js";
+import { basename } from "path";
 import type { CaptureToolType } from "./types.js";
 
 function text(s: string) {
@@ -767,6 +770,101 @@ async function main() {
       lines.push(`### API Configuration\n`);
       lines.push(`**BIBLIA_API_KEY**: ${BIBLIA_API_KEY ? "set" : "NOT SET"}`);
 
+      return text(lines.join("\n"));
+    }
+  );
+
+  // ── 25. read_exported_section ─────────────────────────────────────────────
+  server.tool(
+    "read_exported_section",
+    "Read a PDF the user exported from Logos (Print/Export → PDF) and return the passage that starts at a section heading, or excerpts that contain a phrase, each with a citation. Use to check a claim against an owned book: pass author and title, plus a section heading or a phrase. Reads only the named file and never touches Logos. Export page numbers are the PDF's own numbering, not the book's printed pages, so cite the section heading instead.",
+    {
+      path: z.string().describe("Full path to the exported .pdf, e.g. /Users/you/Desktop/export.pdf"),
+      author: z.string().optional().describe("Author, as it should appear in the citation"),
+      title: z.string().optional().describe("Book title, as it should appear in the citation"),
+      section: z.string().optional().describe("Section heading to start from, e.g. 'The Defeat of Pride'. Takes precedence over query."),
+      query: z.string().optional().describe("Phrase to find. Returns up to 5 excerpts, each with its export page."),
+      max_chars: z.number().int().min(500).max(20000).optional().describe("Max characters of passage text to return (default 6000)"),
+    },
+    async ({ path, author, title, section, query, max_chars }) => {
+      let raw;
+      try {
+        raw = await readExportedPdf(path);
+      } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+      }
+
+      const clean = cleanExportPages(raw.pages);
+      if (clean.fullText.trim().length === 0) {
+        return err("This PDF has no text layer, so it may be a scanned image. Re-export from Logos with Print/Export → PDF and try again.");
+      }
+
+      const parts = [author, title]
+        .filter((p): p is string => Boolean(p && p.trim()))
+        .map((p) => p.trim().replace(/\.$/, ""));
+      const source = parts.length > 0 ? parts.join(". ") : `(no author or title given; file: ${basename(path)})`;
+      const caveat = "Export pages are the PDF's own numbering, not the book's printed pages. Cite by section heading, and check any quotation against the text before you use it.";
+
+      // A blank section or query counts as not given.
+      const heading = section?.trim() || undefined;
+      const phrase = query?.trim() || undefined;
+
+      if (heading) {
+        const found = sectionFrom(clean, heading, max_chars ?? 6000);
+        if (!found) {
+          return err(`The heading "${heading}" is not in this export. Check the wording, or search for a phrase with query instead.`);
+        }
+        const notes: string[] = [];
+        if (!found.atLineStart) {
+          notes.push("The heading was found mid-line here, so check that the passage starts where you expect.");
+        }
+        if (found.otherPages.length > 0) {
+          notes.push(`The same heading text also appears on export page(s) ${found.otherPages.join(", ")}.`);
+        }
+        const lines = [
+          `Source: ${source}`,
+          `Section: "${heading}"`,
+          `Export pages ${found.startPage}–${found.endPage} of ${raw.pageCount}`,
+          ...notes,
+          "",
+          found.text,
+          "",
+          found.truncated ? "(Cut at the character limit. More of the export follows: raise max_chars, up to 20000.)" : "(End of the export.)",
+          caveat,
+        ];
+        return text(lines.join("\n"));
+      }
+
+      if (phrase) {
+        const { total, hits } = findPhrase(clean, phrase, { maxHits: 5 });
+        if (total === 0) {
+          return text(`No matches for "${phrase}" in this export (${raw.pageCount} pages). Try a shorter phrase or check the spelling.`);
+        }
+        const lines = [
+          `Found ${total} match${total === 1 ? "" : "es"} for "${phrase}"${total > hits.length ? ` (showing the first ${hits.length})` : ""}.`,
+          `Source: ${source}`,
+          "",
+        ];
+        hits.forEach((hit, i) => {
+          lines.push(`${i + 1}. Export page ${hit.exportPage} of ${raw.pageCount}`);
+          lines.push(`   …${hit.excerpt}…`);
+          lines.push("");
+        });
+        lines.push("Query results do not show the section heading. To cite a section, read it with the section parameter.");
+        lines.push(caveat);
+        return text(lines.join("\n"));
+      }
+
+      const opening = openingText(clean, max_chars ?? 6000);
+      const lines = [
+        `Source: ${source}`,
+        `Export pages ${opening.startPage}–${opening.endPage} of ${raw.pageCount} (opening text; no section or query given)`,
+        "",
+        opening.text,
+        "",
+        opening.truncated ? "(Cut at the character limit.)" : "(End of the export.)",
+        caveat,
+      ];
       return text(lines.join("\n"));
     }
   );

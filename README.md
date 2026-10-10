@@ -4,7 +4,7 @@ A [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server that c
 
 ## What This Does
 
-- **24 MCP tools** that let Claude read Bible text, search Scripture, navigate Logos, access your notes/highlights/favorites/clippings, check reading plans, explore word studies and factbook entries, search your library catalog, open commentaries and lexicons, run cross-resource searches, capture Logos panels for vision reading, check what Logos is showing, and diagnose environment issues
+- **26 MCP tools** that let Claude read Bible text, search Scripture, navigate Logos, access your notes/highlights/favorites/clippings, check reading plans, explore word studies and factbook entries, search your library catalog, open commentaries and lexicons, run cross-resource searches, capture Logos panels for vision reading, check what Logos is showing, and diagnose environment issues
 - **A Socratic Bible Study agent** that guides you through Scripture using questions (not lectures), welcoming any denominational background, with four questioning layers: Observation, Interpretation, Correlation, and Application
 - **A QA Tool Tester agent** that systematically exercises all tools and produces a pass/fail/skip report
 
@@ -72,7 +72,7 @@ BIBLIA_API_KEY=your_api_key_here
 claude
 ```
 
-Once Claude Code starts, type `/mcp` to check that the "logos" server appears with 24 tools.
+Once Claude Code starts, type `/mcp` to check that the "logos" server appears with 26 tools.
 
 ## Using with Claude Desktop or Cowork
 
@@ -148,6 +148,15 @@ Tools for accessing your notes, highlights, favorites, and reading progress
 | `get_favorites` | Lists your saved favorites/bookmarks |
 | `get_reading_progress` | Shows your reading plan status |
 
+### Exported Logos PDFs
+Tools for checking a claim against a book you own, using a PDF you exported yourself
+
+| Tool | What it does |
+|------|-------------|
+| `read_exported_section` | Reads a PDF you exported from Logos (Print/Export → PDF). Returns the passage that starts at a section heading, with the author, title, and section for the citation. Or returns excerpts that contain a phrase, each with its export page. Reads only the file you name. |
+
+Export page numbers come from the PDF itself, not the book's printed pages, so the citation uses the section heading. Use this on files you exported yourself, for your own study. Logos's Terms of Service limit automated access to its content, so the tool never opens or searches Logos for you.
+
 ### Study Workflows
 Tools for structured study paths
 
@@ -191,14 +200,14 @@ LogosBibleSoftwareMCP/
 ├── .claude/
 │   └── agents/
 │       ├── socratic-bible-study.md    # Socratic agent definition
-│       └── tool-tester.md            # QA agent for testing all 24 tools
+│       └── tool-tester.md            # QA agent for testing all 26 tools
 ├── .mcp.json                          # MCP server config (you create this)
 ├── .env                               # API key (you create this)
 ├── logos-mcp-server/
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── src/
-│   │   ├── index.ts                   # MCP server entry point (24 tools)
+│   │   ├── index.ts                   # MCP server entry point (26 tools)
 │   │   ├── cli.ts                     # Diagnose CLI entry point
 │   │   ├── config.ts                  # Paths, API config, constants
 │   │   ├── types.ts                   # Shared TypeScript types
@@ -261,7 +270,7 @@ Each Logos install uses a randomly named instance directory (e.g. `a3wo155q.w14`
 
 **Logos doesn't open passages** - Make sure Logos Bible Software is running before using `navigate_passage`, `open_word_study`, or `open_factbook`.
 
-**Book content is encrypted in local resource files** - Use `capture_panel_screenshot` to let AI read what is visible in Logos, and use `get_clippings` for text you've explicitly clipped/highlighted.
+**Book content is encrypted in local resource files** - Use `capture_panel_screenshot` to let AI read what is visible in Logos, use `get_clippings` for text you've explicitly clipped/highlighted, or export a section to PDF from Logos and use `read_exported_section`.
 
 ## License
 
